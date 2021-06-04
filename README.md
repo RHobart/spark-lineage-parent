@@ -2,7 +2,7 @@
 跟踪Spark-sql中的字段血缘关系
 
 # 步骤如下:
-step1. 将sparkLineageImpl.scala 添加到工程中的任何一个位置;
+step1. 将sparkLineageImpl.scala 添加到工程中的任何一个位置
 step2. 实例化一个对象,需要传入两个参数有,分别为:(DataFrame,SparkSession)
 setp3. 调用对象中的getRslt()方法就可以获取到字段的字段端到端的关系图
 

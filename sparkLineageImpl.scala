@@ -50,11 +50,11 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     df.queryExecution.analyzed.collect{
       case ag:Aggregate => {
         count = count + 1
-        val tmp1 = ag.aggregateExpressions.map(r=>(r.verboseString,r.references.toList.map(_.toString()),r.prettyName))
+        val tmpRecord = ag.aggregateExpressions.map(r=>(r.verboseString,r.references.toList.map(_.toString()),r.prettyName))
         val ot = ag.output.map(_.toString())
         if(ot.map(_.split("#")(0)).equals(targetListSchemas) && count == 1) targetField = ot.toList
         ot.foreach(o=>{
-          tmp1.foreach(t=>{
+          tmpRecord.foreach(t=>{
             if(t._1.contains(o)) recordFieldProcess.append((o,t._2,t._3)) //确定结果字段来源于多个源字段
           })
         })

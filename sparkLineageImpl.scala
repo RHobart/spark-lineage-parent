@@ -7,19 +7,20 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.collection.mutable.{ListBuffer, Map}
 
-class sparkLineageImpl(df:DataFrame, spark:SparkSession) {
+class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
   private val targetListSchemas = df.columns.toList
+
   private var targetField:List[String] = List()  // 目标字段
-  private val fieldRelation:Map[String,List[String]] = Map() // 字段过程
+  private val fieldRelation:Map[String,List[String]] = Map() // 字段关系
   private val tbFieldRelation:Map[String,List[String]] = Map() // 字段与表的关系
 
-  private val logicalMap:Map[String,List[String]] = Map()
-  private val lb:ListBuffer[(String,List[String],String)] = ListBuffer() // 存放字段过程,样例{"f1"->["f2","f3"],"alias"}
-  private val tableList:ListBuffer[String] = ListBuffer()
+  private val recordFieldProcess:ListBuffer[(String,List[String],String)] = ListBuffer() // 存放字段过程,样例{"f1"->["f2","f3"],"alias"}
+  private val tableList:ListBuffer[String] = ListBuffer() // 目标表
+
   /*
-   获取目标到源字段以及表之间的对应关系
+   记录目标字段到源表字段
    */
-  private def fieldLiveLine(tf:String,cl:ListBuffer[(String,String)]): Unit ={
+  private def execfieldLineage(tf:String,cl:ListBuffer[(String,String)]): Unit ={
     fieldRelation.get(tf).foreach(childList=>{
       childList.foreach(f=>{
         var flg = 1
@@ -29,7 +30,7 @@ class sparkLineageImpl(df:DataFrame, spark:SparkSession) {
             flg = 0
           }
         })
-        if(flg == 1) fieldLiveLine(f,cl)
+        if(flg == 1) execfieldLineage(f,cl)
       })
     })
   }
@@ -47,25 +48,25 @@ class sparkLineageImpl(df:DataFrame, spark:SparkSession) {
 
     var count = 0
     df.queryExecution.analyzed.collect{
-      case ag: Aggregate => {
+      case ag:Aggregate => {
         count = count + 1
         val tmp1 = ag.aggregateExpressions.map(r=>(r.verboseString,r.references.toList.map(_.toString()),r.prettyName))
         val ot = ag.output.map(_.toString())
         if(ot.map(_.split("#")(0)).equals(targetListSchemas) && count == 1) targetField = ot.toList
         ot.foreach(o=>{
           tmp1.foreach(t=>{
-            if(t._1.contains(o)) lb.append((o,t._2,t._3)) //确定结果字段来源于多个源字段
+            if(t._1.contains(o)) recordFieldProcess.append((o,t._2,t._3)) //确定结果字段来源于多个源字段
           })
         })
       }
       case proj:Project => {
         count = count + 1
-        val tmp1 = proj.projectList.toList.map(r=>(r.verboseString,r.references.toList.map(_.toString()),r.prettyName))
+        val tmpRecord = proj.projectList.toList.map(r=>(r.verboseString,r.references.toList.map(_.toString()),r.prettyName))
         val ot = proj.output.map(_.toString())
         if(ot.map(_.split("#")(0)).equals(targetListSchemas) && count == 1) targetField = ot.toList
         ot.foreach(o=>{
-          tmp1.foreach(t=>{
-            if(t._1.contains(o)) lb.append((o,t._2,t._3)) //确定结果字段来源于多个源字段
+          tmpRecord.foreach(t=>{
+            if(t._1.contains(o)) recordFieldProcess.append((o,t._2,t._3)) //确定结果字段来源于多个源字段
           })
         })
       }
@@ -89,8 +90,8 @@ class sparkLineageImpl(df:DataFrame, spark:SparkSession) {
   def getRslt():Map[String,List[(String,String)]] ={
     val retRslt:Map[String,List[(String,String)]] = Map() // 返回结果
     traceFieldLineMap(df)
-    lb.foreach(l=>{
-      lb.foreach(c=>{
+    recordFieldProcess.foreach(l=>{
+      recordFieldProcess.foreach(c=>{
         if(l._1 == c._1){
           if(l._3.equals("alias")) fieldRelation += (l._1->l._2) // 如果key:字段名称 相等，则去alias的目标字段
         }else{
@@ -100,7 +101,7 @@ class sparkLineageImpl(df:DataFrame, spark:SparkSession) {
     })
     targetField.foreach(e=>{
       val ls:ListBuffer[(String,String)] = ListBuffer()
-      fieldLiveLine(e,ls)
+      execfieldLineage(e,ls)
       retRslt += (e->ls.toList.distinct)
     })
     retRslt
@@ -108,8 +109,8 @@ class sparkLineageImpl(df:DataFrame, spark:SparkSession) {
 
   def getVar(): Unit ={
     traceFieldLineMap(df)
-    lb.foreach(l=>{
-      lb.foreach(c=>{
+    recordFieldProcess.foreach(l=>{
+      recordFieldProcess.foreach(c=>{
         if(l._1 == c._1){
           if(l._3.equals("alias")) fieldRelation += (l._1->l._2)
         }else{

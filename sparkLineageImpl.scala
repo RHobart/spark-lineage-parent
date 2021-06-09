@@ -4,7 +4,9 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.{DataFrame, SparkSession}
-
+import org.json4s.{Formats,NoTypeHints}
+import org.json4s.jackson.Serialization
+import org.json4s.jackson.Serialization.write
 import scala.collection.mutable.{ListBuffer, Map}
 
 class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
@@ -107,6 +109,15 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     retRslt
   }
 
+  def prettyRslt():String = {
+    val rslt = getRslt()
+    val tmp:Map[String,List[List[String]]] = Map()
+    rslt.foreach(m=>tmp+=(m._1.split("#")(0)->m._2.map(e=>List(e._1.split("#")(0),e._2))))
+    val ret: Predef.Map[String, List[List[String]]] = tmp.toMap
+    implicit val formats:AnyRef with Formats = Serialization.formats(NoTypeHints)
+    write(ret)
+  }
+
   def getVar(): Unit ={
     traceFieldLineMap(df)
     recordFieldProcess.foreach(l=>{
@@ -118,11 +129,8 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
         }
       })
     })
-    println("----------------targetField-------------------")
     targetField.foreach(r=>println("targetField:"+r))
-    println("----------------tableNameField-------------------")
     tbFieldRelation.foreach(r=>println("tableNameField:"+r))
-    println("----------------fieldName-------------------")
     fieldRelation.foreach(r=>println("fieldName:"+r))
   }
 }

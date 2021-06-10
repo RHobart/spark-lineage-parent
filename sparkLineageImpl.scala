@@ -22,7 +22,7 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
   /*
    记录目标字段到源表字段
    */
-  private def execfieldLineage(tf:String,cl:ListBuffer[(String,String)]): Unit ={
+  private def searchLineage(tf:String,cl:ListBuffer[(String,String)]): Unit ={
     fieldRelation.get(tf).foreach(childList=>{
       childList.foreach(f=>{
         var flg = 1
@@ -32,7 +32,7 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
             flg = 0
           }
         })
-        if(flg == 1) execfieldLineage(f,cl)
+        if(flg == 1) searchLineage(f,cl)
       })
     })
   }
@@ -52,25 +52,17 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     df.queryExecution.analyzed.collect{
       case ag:Aggregate => {
         count = count + 1
-        val tmpRecord = ag.aggregateExpressions.map(r=>(r.verboseString,r.references.toList.map(_.toString()),r.prettyName))
+        ag.aggregateExpressions.foreach{a=>{recordFieldProcess.append((a.name+"#"+a.exprId.id.toString,a.references.map(_.toString()).toList,a.prettyName))}
+
         val ot = ag.output.map(_.toString())
         if(ot.map(_.split("#")(0)).equals(targetListSchemas) && count == 1) targetField = ot.toList
-        ot.foreach(o=>{
-          tmpRecord.foreach(t=>{
-            if(t._1.contains(o)) recordFieldProcess.append((o,t._2,t._3)) //确定结果字段来源于多个源字段
-          })
-        })
+        }
       }
       case proj:Project => {
         count = count + 1
-        val tmpRecord = proj.projectList.toList.map(r=>(r.verboseString,r.references.toList.map(_.toString()),r.prettyName))
+        proj.projectList.toList.foreach{r=>recordFieldProcess.append((r.name+"#"+r.exprId.id.toString,r.references.toList.map(_.toString()),r.prettyName))}
         val ot = proj.output.map(_.toString())
         if(ot.map(_.split("#")(0)).equals(targetListSchemas) && count == 1) targetField = ot.toList
-        ot.foreach(o=>{
-          tmpRecord.foreach(t=>{
-            if(t._1.contains(o)) recordFieldProcess.append((o,t._2,t._3)) //确定结果字段来源于多个源字段
-          })
-        })
       }
       case sa:SubqueryAlias => {
         sa.child.collect {
@@ -89,7 +81,7 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     }
   }
 
-  def getRslt():Map[String,List[(String,String)]] ={
+  private def getRslt():Map[String,List[(String,String)]] ={
     val retRslt:Map[String,List[(String,String)]] = Map() // 返回结果
     traceFieldLineMap(df)
     recordFieldProcess.foreach(l=>{
@@ -103,7 +95,7 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     })
     targetField.foreach(e=>{
       val ls:ListBuffer[(String,String)] = ListBuffer()
-      execfieldLineage(e,ls)
+      searchLineage(e,ls)
       retRslt += (e->ls.toList.distinct)
     })
     retRslt

@@ -1,13 +1,17 @@
 package com.yj
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.json4s.{Formats,NoTypeHints}
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
+
+import scala.collection.GenTraversableOnce
 import scala.collection.mutable.{ListBuffer, Map}
+import scala.util.control.Breaks.{break, breakable}
 
 class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
   private val targetListSchemas = df.columns.toList
@@ -23,18 +27,24 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
    记录目标字段到源表字段
    */
   private def searchLineage(tf:String,cl:ListBuffer[(String,String)]): Unit ={
-    fieldRelation.get(tf).foreach(childList=>{
-      childList.foreach(f=>{
-        var flg = 1
-        tbFieldRelation.foreach(t=>{
-          if(t._2.contains(f)){
-            cl.append((f,t._1))
-            flg = 0
-          }
+    fieldRelation.getOrElse(tf,None) match {
+      case None => println("None value:"+tf)
+      case _ => fieldRelation.get(tf).foreach(childList=>{
+        childList.foreach(f=>{
+          var iterflg = 1
+          tbFieldRelation.foreach(t=>{
+            if(t._2.contains(f)){
+              cl.append((f,t._1))
+              iterflg = 0
+            }
+          })
+          breakable({
+            if(tf==f) break()  //解决递归查询查询栈溢出问题 
+            if(iterflg == 1) searchLineage(f,cl)
+          })
         })
-        if(flg == 1) searchLineage(f,cl)
       })
-    })
+    }
   }
 
   /*
@@ -44,7 +54,7 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     // 获取表名
     df.queryExecution.logical.collect{
       case u:UnresolvedRelation => {
-        tableList.append(u.tableIdentifier.table)
+        if(u.tableName.contains(".")) tableList.append(u.tableName.split('.')(1)) else tableList.append(u.tableName)
       }
     }
 
@@ -75,6 +85,12 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
             tableList.foreach{r=>{
               if(r.equals(sa.alias)) tbFieldRelation += (sa.alias->ds.output.map(_.toString()).toList)
             }}
+          }
+          case hivetable:HiveTableRelation => {
+            tableList.foreach { r=>{
+              if(r.equals(sa.alias)) tbFieldRelation += (sa.alias->hivetable.output.map(_.toString()).toList)
+            }
+            }
           }
         }
       }
@@ -110,6 +126,13 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     write(ret)
   }
 
+  def commRslt():Map[String,List[String]] = {
+    val rslt = getRslt()
+    val ret:Map[String,List[String]] = Map()
+    rslt.foreach(m=>ret+=(m._1.split("#")(0)->m._2.map(e=>e._2+"."+e._1.split("#")(0))))
+    ret
+  }
+
   def getVar(): Unit ={
     traceFieldLineMap(df)
     recordFieldProcess.foreach(l=>{
@@ -121,8 +144,11 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
         }
       })
     })
+    println("target Field:------------------------->")
     targetField.foreach(r=>println("targetField:"+r))
+    println("source table Field:------------------------->")
     tbFieldRelation.foreach(r=>println("tableNameField:"+r))
+    println("field Relation :------------------------->")
     fieldRelation.foreach(r=>println("fieldName:"+r))
   }
 }

@@ -11,3 +11,5 @@ val df = spark.createDataFrame(Seq(("1","test"))).toDf("id","name")
 #这样的方式创建dataframe后续追踪的关系图谱就不一定看的懂，但是相反相反的确是正常的：
 case class schema(id:String,name:String)
 val df = spark.createDataFrame(Seq(("1","test"))).toDf("id","name").as[schema]
+
+其他的类似于orc,parquet 格式都是本身自带表头信息的，直接用就行

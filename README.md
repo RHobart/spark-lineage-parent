@@ -14,4 +14,5 @@ val df = spark.createDataFrame(Seq(("1","test"))).toDf("id","name").as[schema]
 
 其他的类似于orc,parquet 格式都是本身自带表头信息的，直接用就行
 
-![image](https://user-images.githubusercontent.com/26522622/123889152-76b02600-d987-11eb-88b4-709ea4c3f5a6.png)
+![image](https://user-images.githubusercontent.com/26522622/123889186-8cbde680-d987-11eb-899a-5acf1f375f6f.png)
+

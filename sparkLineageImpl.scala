@@ -5,16 +5,22 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
+import org.json4s.{Formats, NoTypeHints}
 
-import scala.collection.GenTraversableOnce
 import scala.collection.mutable.{ListBuffer, Map}
 import scala.util.control.Breaks.{break, breakable}
 
-class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
-  private val targetListSchemas = df.columns.toList
+
+object sparkLineageImplV1{
+  def main(args: Array[String]): Unit = {
+
+  }
+}
+
+class sparkLineageImplV1(spark:SparkSession) {
+  private var targetListSchemas:List[String] = null
 
   private var targetField:List[String] = List()  // 目标字段
   private val fieldRelation:Map[String,List[String]] = Map() // 字段关系
@@ -22,6 +28,7 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
 
   private val recordFieldProcess:ListBuffer[(String,List[String],String)] = ListBuffer() // 存放字段过程,样例{"f1"->["f2","f3"],"alias"}
   private val tableList:ListBuffer[String] = ListBuffer() // 目标表
+
 
   /*
    记录目标字段到源表字段
@@ -39,7 +46,7 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
             }
           })
           breakable({
-            if(tf==f) break()  //解决递归查询查询栈溢出问题 
+            if(tf==f) break()
             if(iterflg == 1) searchLineage(f,cl)
           })
         })
@@ -97,7 +104,8 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     }
   }
 
-  private def getRslt():Map[String,List[(String,String)]] ={
+  private def getLineageRel(df:DataFrame):Map[String,List[(String,String)]] ={
+    targetListSchemas = df.columns.toList
     val retRslt:Map[String,List[(String,String)]] = Map() // 返回结果
     traceFieldLineMap(df)
     recordFieldProcess.foreach(l=>{
@@ -117,8 +125,8 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     retRslt
   }
 
-  def prettyRslt():String = {
-    val rslt = getRslt()
+  def prettyRslt(df:DataFrame):String = {
+    val rslt = getLineageRel(df)
     val tmp:Map[String,List[List[String]]] = Map()
     rslt.foreach(m=>tmp+=(m._1.split("#")(0)->m._2.map(e=>List(e._1.split("#")(0),e._2))))
     val ret: Predef.Map[String, List[List[String]]] = tmp.toMap
@@ -126,14 +134,14 @@ class sparkLineageImplV3(df:DataFrame, spark:SparkSession) {
     write(ret)
   }
 
-  def commRslt():Map[String,List[String]] = {
-    val rslt = getRslt()
+  def commRslt(df:DataFrame):Map[String,List[String]] = {
+    val rslt = getLineageRel(df)
     val ret:Map[String,List[String]] = Map()
     rslt.foreach(m=>ret+=(m._1.split("#")(0)->m._2.map(e=>e._2+"."+e._1.split("#")(0))))
     ret
   }
 
-  def getVar(): Unit ={
+  def getVar(df:DataFrame): Unit ={
     traceFieldLineMap(df)
     recordFieldProcess.foreach(l=>{
       recordFieldProcess.foreach(c=>{

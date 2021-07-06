@@ -1,7 +1,7 @@
 # spark-lineage-parent
 跟踪Spark-sql中的字段血缘关系
 
-# 可以直接下载jar包进行spark字段关系进行处理，处理方法如下:
+## 可以直接下载jar包进行spark字段关系进行处理，处理方法如下:
 val relObj = new new sparkLineageImplV1(spark)
 relObj.prettyRslt(df) 或者relObj.commRslt(df) 都可以获取到结果
 

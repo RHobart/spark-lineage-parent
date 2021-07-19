@@ -10,12 +10,13 @@ import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 import org.json4s.{Formats, NoTypeHints}
 
+import scala.collection.JavaConversions.seqAsJavaList
 import scala.collection.mutable.{ListBuffer, Map}
 import scala.util.control.Breaks.{break, breakable}
 
 
 class sparkLineageImpl(spark:SparkSession) {
-  private var targetListSchemas:List[String] = null
+  private var targetListSchemas:List[String] = List()
 
   private var targetField:List[String] = List()
   private val fieldRelation:Map[String,List[String]] = Map()
@@ -23,6 +24,8 @@ class sparkLineageImpl(spark:SparkSession) {
 
   private val recordFieldProcess:ListBuffer[(String,List[String],String)] = ListBuffer() // store field process
   private val tableList:ListBuffer[String] = ListBuffer() // target tables
+
+  clearTmpRslt() // 每次先清空数据结构，防止上次结果集驻留
 
 
   /*
@@ -159,5 +162,14 @@ class sparkLineageImpl(spark:SparkSession) {
     tbFieldRelation.foreach(r=>println("tableNameField:"+r))
     println("field Relation :------------------------->")
     fieldRelation.foreach(r=>println("fieldName:"+r))
+  }
+
+  private def clearTmpRslt(): Unit ={
+    targetListSchemas clear()
+    targetField.clear()
+    fieldRelation.clear()
+    tbFieldRelation.clear()
+    recordFieldProcess.clear()
+    tableList.clear()
   }
 }

@@ -29,7 +29,7 @@ class sparkLineageImpl(spark:SparkSession) {
 
 
   /*
-   Record the process of field detail
+   自动寻找字段关系
    */
   private def searchLineage(tf:String,cl:ListBuffer[(String,String)]): Unit ={
     fieldRelation.getOrElse(tf,None) match {
@@ -53,7 +53,7 @@ class sparkLineageImpl(spark:SparkSession) {
   }
 
   /*
-    Trace field that is composed of some fields
+    记录字段流转过程
    */
   private def traceFieldLineMap(df:DataFrame): Unit = {
     // 获取表名

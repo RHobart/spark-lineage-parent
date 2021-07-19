@@ -4,6 +4,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.hive.execution.{CreateHiveTableAsSelectCommand, InsertIntoHiveTable}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
@@ -13,25 +14,19 @@ import scala.collection.mutable.{ListBuffer, Map}
 import scala.util.control.Breaks.{break, breakable}
 
 
-object sparkLineageImplV1{
-  def main(args: Array[String]): Unit = {
-
-  }
-}
-
-class sparkLineageImplV1(spark:SparkSession) {
+class sparkLineageImpl(spark:SparkSession) {
   private var targetListSchemas:List[String] = null
 
-  private var targetField:List[String] = List()  // 目标字段
-  private val fieldRelation:Map[String,List[String]] = Map() // 字段关系
-  private val tbFieldRelation:Map[String,List[String]] = Map() // 字段与表的关系
+  private var targetField:List[String] = List()
+  private val fieldRelation:Map[String,List[String]] = Map()
+  private val tbFieldRelation:Map[String,List[String]] = Map()
 
-  private val recordFieldProcess:ListBuffer[(String,List[String],String)] = ListBuffer() // 存放字段过程,样例{"f1"->["f2","f3"],"alias"}
-  private val tableList:ListBuffer[String] = ListBuffer() // 目标表
+  private val recordFieldProcess:ListBuffer[(String,List[String],String)] = ListBuffer() // store field process
+  private val tableList:ListBuffer[String] = ListBuffer() // target tables
 
 
   /*
-   记录目标字段到源表字段
+   Record the process of field detail
    */
   private def searchLineage(tf:String,cl:ListBuffer[(String,String)]): Unit ={
     fieldRelation.getOrElse(tf,None) match {
@@ -55,7 +50,7 @@ class sparkLineageImplV1(spark:SparkSession) {
   }
 
   /*
-    追踪目标字段是由哪些源字段计算得来的
+    Trace field that is composed of some fields
    */
   private def traceFieldLineMap(df:DataFrame): Unit = {
     // 获取表名
@@ -67,6 +62,12 @@ class sparkLineageImplV1(spark:SparkSession) {
 
     var count = 0
     df.queryExecution.analyzed.collect{
+      case crt:CreateHiveTableAsSelectCommand => {
+        if(count == 0) targetListSchemas = crt.outputColumnNames.toList
+      }
+      case ins:InsertIntoHiveTable => {
+        if(count == 0) targetListSchemas = ins.table.schema.fields.toList.map(f=>f.name)
+      }
       case ag:Aggregate => {
         count = count + 1
         ag.aggregateExpressions.foreach{a=>{recordFieldProcess.append((a.name+"#"+a.exprId.id.toString,a.references.map(_.toString()).toList,a.prettyName))}
